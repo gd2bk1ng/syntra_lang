@@ -1072,9 +1072,9 @@ impl CapabilityLedger {
 mod tests {
     fn ids_three() -> (InvocationId, InvocationId, InvocationId, CapabilityOwnerId, CapabilityOwnerId, CapabilityOwnerId) {
         (
-            InvocationId::new_for_test(1, 1),
-            InvocationId::new_for_test(1, 2),
-            InvocationId::new_for_test(1, 3),
+            InvocationId::new_for_test(1),
+            InvocationId::new_for_test(2),
+            InvocationId::new_for_test(3),
             CapabilityOwnerId::new_for_test(1),
             CapabilityOwnerId::new_for_test(2),
             CapabilityOwnerId::new_for_test(3),
