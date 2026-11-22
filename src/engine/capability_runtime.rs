@@ -1249,6 +1249,7 @@ mod tests {
         let (root, child, root_owner, child_owner) = ids();
         let mut ledger = CapabilityLedger::new();
         let capability = ledger.grant(root_owner, CapabilityId::ReadFile).unwrap();
+        let replacement = ledger.grant(root_owner, CapabilityId::WriteFile).unwrap();
         let transfer = ledger
             .transfer_batch(
                 root,
@@ -1268,16 +1269,16 @@ mod tests {
             .unwrap();
         let version = ledger.version();
 
-        // Rebind the transfer to a different capability instance without
-        // changing the ledger version. The forged replacement must not commit.
-        let replacement = ledger.grant(root_owner, CapabilityId::WriteFile).unwrap();
+        // Rebind the transfer to a different existing capability instance
+        // without changing the ledger version. The forged replacement must
+        // not commit.
         ledger.transfers.get_mut(&transfer).unwrap().capability = replacement;
 
         assert_eq!(
             ledger.commit_abandonment(&plan),
             Err(CapabilityRuntimeError::InvalidTerminationTransfer(transfer))
         );
-        assert_eq!(ledger.version(), version + 1);
+        assert_eq!(ledger.version(), version);
         assert_eq!(
             ledger.transfer(transfer).unwrap().state(),
             CapabilityTransferState::Active
