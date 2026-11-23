@@ -269,6 +269,7 @@ impl RuntimeInvocationRegistry {
 pub(crate) struct RuntimeTerminationPlan {
     registry_version: u64,
     invocation: InvocationId,
+    registry_snapshot: BTreeMap<InvocationId, RuntimeInvocationRecord>,
     capability: CapabilityTerminationPlan,
 }
 
@@ -276,6 +277,7 @@ pub(crate) struct RuntimeTerminationPlan {
 pub(crate) struct RuntimeAbandonmentPlan {
     registry_version: u64,
     invocation: InvocationId,
+    registry_snapshot: BTreeMap<InvocationId, RuntimeInvocationRecord>,
     capability: CapabilityAbandonmentPlan,
 }
 
@@ -392,6 +394,7 @@ impl RuntimeCoordinator {
         Ok(RuntimeTerminationPlan {
             registry_version: self.registry.version,
             invocation: id,
+            registry_snapshot: self.registry.records.clone(),
             capability,
         })
     }
@@ -409,6 +412,9 @@ impl RuntimeCoordinator {
                 expected_registry_version: plan.registry_version,
                 actual_registry_version: self.registry.version,
             });
+        }
+        if self.registry.records != plan.registry_snapshot {
+            return Err(RuntimeError::RegistryInvariantViolation);
         }
 
         let record = self
@@ -489,6 +495,7 @@ impl RuntimeCoordinator {
         Ok(RuntimeAbandonmentPlan {
             registry_version: self.registry.version,
             invocation: id,
+            registry_snapshot: self.registry.records.clone(),
             capability,
         })
     }
@@ -509,6 +516,9 @@ impl RuntimeCoordinator {
                 expected_registry_version: plan.registry_version,
                 actual_registry_version: self.registry.version,
             });
+        }
+        if self.registry.records != plan.registry_snapshot {
+            return Err(RuntimeError::RegistryInvariantViolation);
         }
         let record = self.registry.records.get(&plan.invocation)
             .ok_or(RuntimeError::UnknownInvocation(plan.invocation))?;
@@ -932,6 +942,46 @@ mod tests {
             super::super::capability_runtime::CapabilityTransferState::Abandoned);
         assert_eq!(coordinator.capability_transfer(parent_transfer).unwrap().returned_at(), None);
         assert_eq!(coordinator.capability_ledger.validate_structure(), Ok(()));
+    }
+
+    #[test]
+    fn forged_registry_record_rejects_termination_plan_without_mutation() {
+        let mut coordinator = RuntimeCoordinator::new().unwrap();
+        let root = executing_root(&mut coordinator);
+        let plan = coordinator.prepare_termination(root).unwrap();
+        let registry_version = coordinator.registry.version;
+        let ledger_version = coordinator.capability_ledger_version();
+
+        coordinator.registry.records.get_mut(&root).unwrap().owner =
+            CapabilityOwnerId::new_for_test(99);
+
+        assert_eq!(
+            coordinator.commit_termination(&plan),
+            Err(RuntimeError::RegistryInvariantViolation)
+        );
+        assert_eq!(coordinator.registry.version, registry_version);
+        assert_eq!(coordinator.capability_ledger_version(), ledger_version);
+        assert_eq!(coordinator.invocation(root).unwrap().state(), InvocationState::Executing);
+    }
+
+    #[test]
+    fn forged_registry_record_rejects_abandonment_plan_without_mutation() {
+        let mut coordinator = RuntimeCoordinator::new().unwrap();
+        let root = executing_root(&mut coordinator);
+        let plan = coordinator.prepare_abandonment(root).unwrap();
+        let registry_version = coordinator.registry.version;
+        let ledger_version = coordinator.capability_ledger_version();
+
+        coordinator.registry.records.get_mut(&root).unwrap().owner =
+            CapabilityOwnerId::new_for_test(99);
+
+        assert_eq!(
+            coordinator.commit_abandonment(&plan),
+            Err(RuntimeError::RegistryInvariantViolation)
+        );
+        assert_eq!(coordinator.registry.version, registry_version);
+        assert_eq!(coordinator.capability_ledger_version(), ledger_version);
+        assert_eq!(coordinator.invocation(root).unwrap().state(), InvocationState::Executing);
     }
 
     #[test]
