@@ -1369,7 +1369,7 @@ mod tests {
                 id if id == root || id == child => Some(InvocationState::Executing),
                 _ => None,
             }),
-            Err(CapabilityRuntimeError::InvalidTerminationTransfer(parent))
+            Err(CapabilityRuntimeError::InvalidTerminationAncestry(parent))
         );
         assert_eq!(ledger.version, version);
         assert_eq!(
@@ -1405,7 +1405,7 @@ mod tests {
 
         assert_eq!(
             ledger.commit_abandonment(&plan),
-            Err(CapabilityRuntimeError::InvalidTerminationTransfer(transfer))
+            Err(CapabilityRuntimeError::InvalidTerminationAncestry(transfer))
         );
         assert_eq!(ledger.version, version);
         assert_eq!(ledger.transfer(transfer).unwrap().state(), CapabilityTransferState::Active);
@@ -1444,7 +1444,7 @@ mod tests {
                 id if id == root || id == child => Some(InvocationState::Executing),
                 _ => None,
             }),
-            Err(CapabilityRuntimeError::InvalidTerminationTransfer(transfer))
+            Err(CapabilityRuntimeError::RegistryInvariantViolation)
         );
         assert_eq!(ledger.version, version);
         assert_eq!(ledger.transfer(transfer).unwrap().capability(), second);
@@ -1481,7 +1481,7 @@ mod tests {
 
         assert_eq!(
             ledger.commit_abandonment(&plan),
-            Err(CapabilityRuntimeError::InvalidTerminationTransfer(transfer))
+            Err(CapabilityRuntimeError::InvalidTerminationAncestry(transfer))
         );
         assert_eq!(ledger.version, version);
         assert_eq!(ledger.transfer(transfer).unwrap().state(), CapabilityTransferState::Active);
