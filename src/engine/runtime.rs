@@ -985,6 +985,125 @@ mod tests {
     }
 
     #[test]
+    fn three_level_return_plan_rejects_forged_registry_ancestry_atomically() {
+        let mut coordinator = RuntimeCoordinator::new().unwrap();
+        let root = executing_root(&mut coordinator);
+        let child = coordinator.prepare_child(root).unwrap();
+        coordinator.commit(child).unwrap();
+        coordinator.begin_execution(child).unwrap();
+        let grandchild = coordinator.prepare_child(child).unwrap();
+        coordinator.commit(grandchild).unwrap();
+        coordinator.begin_execution(grandchild).unwrap();
+
+        let capability = coordinator
+            .grant_capability(root, super::super::identity::CapabilityId::ReadFile)
+            .unwrap();
+        let parent_transfer = coordinator
+            .transfer_batch(
+                root,
+                &[CapabilityTransferRequest::new(capability, child)],
+            )
+            .unwrap()[0];
+        let child_transfer = coordinator
+            .transfer_batch(
+                child,
+                &[CapabilityTransferRequest::new(capability, grandchild)],
+            )
+            .unwrap()[0];
+
+        let plan = coordinator.prepare_termination(grandchild).unwrap();
+        let registry_version = coordinator.registry.version;
+        let ledger_version = coordinator.capability_ledger_version();
+
+        coordinator.registry.records.get_mut(&grandchild).unwrap().parent = Some(root);
+
+        assert_eq!(
+            coordinator.commit_termination(&plan),
+            Err(RuntimeError::RegistryInvariantViolation)
+        );
+        assert_eq!(coordinator.registry.version, registry_version);
+        assert_eq!(coordinator.capability_ledger_version(), ledger_version);
+        assert_eq!(
+            coordinator.invocation(grandchild).unwrap().parent(),
+            Some(root)
+        );
+        assert_eq!(
+            coordinator.capability_transfer(child_transfer).unwrap().state(),
+            super::super::capability_runtime::CapabilityTransferState::Active
+        );
+        assert_eq!(
+            coordinator.capability_instance(capability).unwrap().state(),
+            super::super::capability_runtime::CapabilityInstanceState::InTransit {
+                transfer: child_transfer
+            }
+        );
+        assert_eq!(
+            coordinator.capability_transfer(parent_transfer).unwrap().state(),
+            super::super::capability_runtime::CapabilityTransferState::Active
+        );
+    }
+
+    #[test]
+    fn three_level_abandonment_plan_rejects_forged_registry_owner_atomically() {
+        let mut coordinator = RuntimeCoordinator::new().unwrap();
+        let root = executing_root(&mut coordinator);
+        let child = coordinator.prepare_child(root).unwrap();
+        coordinator.commit(child).unwrap();
+        coordinator.begin_execution(child).unwrap();
+        let grandchild = coordinator.prepare_child(child).unwrap();
+        coordinator.commit(grandchild).unwrap();
+        coordinator.begin_execution(grandchild).unwrap();
+
+        let capability = coordinator
+            .grant_capability(root, super::super::identity::CapabilityId::ReadFile)
+            .unwrap();
+        let parent_transfer = coordinator
+            .transfer_batch(
+                root,
+                &[CapabilityTransferRequest::new(capability, child)],
+            )
+            .unwrap()[0];
+        let child_transfer = coordinator
+            .transfer_batch(
+                child,
+                &[CapabilityTransferRequest::new(capability, grandchild)],
+            )
+            .unwrap()[0];
+
+        let plan = coordinator.prepare_abandonment(grandchild).unwrap();
+        let registry_version = coordinator.registry.version;
+        let ledger_version = coordinator.capability_ledger_version();
+
+        let forged_owner = CapabilityOwnerId::new_for_test(99);
+        coordinator.registry.records.get_mut(&child).unwrap().owner = forged_owner;
+
+        assert_eq!(
+            coordinator.commit_abandonment(&plan),
+            Err(RuntimeError::RegistryInvariantViolation)
+        );
+        assert_eq!(coordinator.registry.version, registry_version);
+        assert_eq!(coordinator.capability_ledger_version(), ledger_version);
+        assert_eq!(
+            coordinator.invocation(child).unwrap().owner(),
+            forged_owner
+        );
+        assert_eq!(
+            coordinator.capability_transfer(child_transfer).unwrap().state(),
+            super::super::capability_runtime::CapabilityTransferState::Active
+        );
+        assert_eq!(
+            coordinator.capability_instance(capability).unwrap().state(),
+            super::super::capability_runtime::CapabilityInstanceState::InTransit {
+                transfer: child_transfer
+            }
+        );
+        assert_eq!(
+            coordinator.capability_transfer(parent_transfer).unwrap().state(),
+            super::super::capability_runtime::CapabilityTransferState::Active
+        );
+    }
+
+    #[test]
     fn stale_abandonment_plan_rejects_registry_version_change_atomically() {
         let mut coordinator = RuntimeCoordinator::new().unwrap();
         let root = executing_root(&mut coordinator);
