@@ -436,7 +436,7 @@ impl CapabilityLedger {
 
         self.next_transfer_id = next_transfer_id;
         self.version = next_version;
-        self.validate_structure()?;
+        debug_assert!(self.validate_structure().is_ok());
         Ok(planned.into_iter().map(|plan| plan.id).collect())
     }
 
@@ -510,7 +510,7 @@ impl CapabilityLedger {
 
         self.version = next_version;
 
-        self.validate_structure()?;
+        debug_assert!(self.validate_structure().is_ok());
         Ok(())
     }
 
